@@ -46,19 +46,12 @@ nagatha run echo_bot.echo -k message="Hello"
 
 ## 📚 Documentation
 
-All documentation is in the [`docs/`](docs/) folder and automatically synced to the [GitHub Wiki](https://github.com/azcoigreach/nagatha_core/wiki).
-
-**📖 Start Here:**
-- **[GitHub Wiki](https://github.com/azcoigreach/nagatha_core/wiki)** - Full documentation (auto-synced from `docs/`)
-- **[User Guide](docs/User-Guide.md)** - Complete setup and usage guide
-- **[Architecture](docs/Architecture.md)** - System design and internals
-- **[Contributing](docs/Contributing.md)** - Development guidelines
-
-**Quick Links:**
-- [API Reference](docs/User-Guide.md#api-documentation) - Endpoint documentation
-- [Module Development](docs/User-Guide.md#module-development) - Create custom modules
-- [Configuration](docs/User-Guide.md#configuration) - Configuration options
-- [Documentation Index](docs/Index.md) - Complete documentation index
+- **[User Guide](User-Guide)** - Complete setup and usage guide
+- **[Architecture](Architecture)** - System design and internals
+- **[API Reference](User-Guide#api-documentation)** - Endpoint documentation
+- **[Module Development](User-Guide#module-development)** - Create custom modules
+- **[Contributing](Contributing)** - Development guidelines
+- **[Configuration](User-Guide#configuration)** - Configuration options
 
 ## 🧩 Example: Running a Task
 
@@ -101,13 +94,7 @@ nagatha_core/
 │   └── echo_bot/        # Example module
 ├── ai/                  # AI integration
 ├── tests/               # Pytest tests
-└── docs/                # Documentation (auto-synced to GitHub Wiki)
-    ├── Home.md          # Wiki home page
-    ├── User-Guide.md    # Complete user guide
-    ├── Architecture.md  # System architecture
-    ├── Contributing.md  # Development guidelines
-    ├── Index.md         # Documentation index
-    └── ...              # Additional reference docs
+└── docs/                # Documentation (this wiki)
 ```
 
 ## 🧪 Testing
@@ -183,6 +170,8 @@ Contributions are welcome! Please:
 4. Update documentation
 5. Submit a pull request
 
+See [Contributing](Contributing) for detailed guidelines.
+
 ## 📄 License
 
 MIT License - see LICENSE file for details
@@ -190,10 +179,8 @@ MIT License - see LICENSE file for details
 ## 🔗 Links
 
 - [GitHub Repository](https://github.com/azcoigreach/nagatha_core)
-- [GitHub Wiki](https://github.com/azcoigreach/nagatha_core/wiki) - Full documentation (auto-synced from `docs/`)
 - [GitHub Discussions](https://github.com/azcoigreach/nagatha_core/discussions)
-- [User Guide](docs/User-Guide.md) - Complete setup and usage guide
-- [Documentation Index](docs/Index.md) - All documentation pages
+- [Full Documentation](User-Guide)
 
 ---
 
