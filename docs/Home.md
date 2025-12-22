@@ -6,181 +6,101 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-Alpha-yellow)
 
-## 🎯 Features
+## 🎯 What is nagatha_core?
 
-- ✅ **Modular + Pluggable** - Each sub-mind is self-contained and registerable
-- ✅ **Async-First** - Built on FastAPI, Celery, and modern async/await
-- ✅ **RabbitMQ Integration** - Robust message queuing for task distribution
-- ✅ **REST API** - FastAPI with automatic OpenAPI documentation
-- ✅ **CLI Tool** - Rich command-line interface for task management
-- ✅ **Dynamic Module Loading** - Discover and register modules at runtime
-- ✅ **Comprehensive Testing** - Pytest coverage across all components
-- ✅ **Production Ready** - Configuration, logging, error handling
+nagatha_core is a central orchestration framework that manages a network of autonomous AI-driven modules (sub-minds). It provides:
+
+- **Dynamic Module Loading** - Discover and register modules at runtime
+- **Task Queue System** - Distribute tasks via RabbitMQ and Celery
+- **REST API** - FastAPI with automatic OpenAPI documentation
+- **CLI Tool** - Rich command-line interface for task management
+- **Production Ready** - Configuration, logging, error handling
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Python 3.13+
-- RabbitMQ (or use Docker)
-- Redis (result backend)
+### Docker (Recommended)
 
-### Installation
 ```bash
-git clone https://github.com/azcoigreach/nagatha_core
-cd nagatha_core
-pip install -e ".[dev]"
+# Start all services
+docker-compose up -d
+
+# Access API docs
+# http://localhost:8000/docs
+
+# Run a task via API
+curl -X POST http://localhost:8000/tasks/run \
+  -H "Content-Type: application/json" \
+  -d '{"task_name": "echo_bot.echo", "kwargs": {"message": "Hello"}}'
 ```
 
-### Run the Framework
+### Local Installation
+
 ```bash
-# Terminal 1: Start API server
+# Install
+pip install -e ".[dev]"
+
+# Start API server
 python -m uvicorn nagatha_core.main:app --reload
 
-# Terminal 2: Start Celery worker
-celery -A nagatha_core.broker.celery_app worker --loglevel=info
+# Start worker (separate terminal)
+nagatha worker
 
-# Terminal 3: Use CLI
-nagatha list modules
+# Use CLI
+nagatha modules
 nagatha run echo_bot.echo -k message="Hello"
 ```
 
 ## 📚 Documentation
 
-- **[User Guide](User-Guide)** - Complete setup and usage guide
-- **[Architecture](Architecture)** - System design and internals
-- **[API Reference](User-Guide#api-documentation)** - Endpoint documentation
-- **[Module Development](User-Guide#module-development)** - Create custom modules
-- **[Contributing](Contributing)** - Development guidelines
-- **[Configuration](User-Guide#configuration)** - Configuration options
+| Document | Description |
+|----------|-------------|
+| **[User Guide](User-Guide)** | Complete setup and usage guide |
+| **[Architecture](Architecture)** | System design and internals |
+| **[Docker Guide](Docker)** | Docker setup and deployment |
+| **[Contributing](Contributing)** | Development guidelines |
 
-## 🧩 Example: Running a Task
+## 🔑 Key Concepts
 
-### Via CLI
-```bash
-nagatha run echo_bot.echo -k message="Hello from CLI"
-```
+### Modules
 
-### Via API
-```bash
-curl -X POST http://localhost:8000/tasks/run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "task_name": "echo_bot.echo",
-    "kwargs": {"message": "Hello from API"}
-  }'
-```
+Modules are self-contained sub-systems that register tasks with nagatha_core. Each module:
 
-### Response
-```json
-{
-  "task_id": "abc123def456",
-  "status": "pending",
-  "task_name": "echo_bot.echo"
-}
-```
+- Lives in `nagatha_core/modules/`
+- Has a `register_tasks()` function
+- Includes a `config.yaml` with metadata
+- Can optionally provide a `heartbeat()` function
 
-## 🏗️ Project Structure
+### Tasks
 
-```
-nagatha_core/
-├── main.py              # FastAPI application
-├── broker.py            # Celery configuration
-├── config.py            # Configuration loading
-├── cli.py               # Click CLI commands
-├── registry.py          # Module discovery
-├── types.py             # Shared types
-├── logging.py           # Logging setup
-├── modules/             # Sub-mind modules
-│   └── echo_bot/        # Example module
-├── ai/                  # AI integration
-├── tests/               # Pytest tests
-└── docs/                # Documentation (this wiki)
-```
+Tasks are functions that can be executed asynchronously via the task queue. They:
 
-## 🧪 Testing
+- Are registered via `registry.register_task()`
+- Accept keyword arguments
+- Return serializable results
+- Are executed by Celery workers
 
-```bash
-# Run all tests
-pytest tests/ -v
+### API Endpoints
 
-# Run with coverage
-pytest tests/ --cov=nagatha_core
-
-# Run specific test
-pytest tests/test_echo_bot.py -v
-```
-
-## 🔧 CLI Commands
-
-```bash
-# List modules and tasks
-nagatha list modules
-nagatha list tasks
-
-# Run a task
-nagatha run <task_name> --kwargs key=value
-
-# Check status
-nagatha status --task-id <id>
-
-# View configuration
-nagatha config
-nagatha config api.port
-
-# Start worker
-nagatha worker
-```
-
-## 🤖 Creating a Custom Module
-
-1. Create a module directory in `nagatha_core/modules/`
-2. Add `__init__.py` with task functions and `register_tasks`
-3. Add `config.yaml` for module metadata
-4. Restart or trigger module discovery
-
-Example:
-```python
-# my_module/__init__.py
-def my_task(data: str) -> str:
-    return f"Processed: {data}"
-
-def register_tasks(registry):
-    registry.register_task("my_module", "my_task", my_task)
-```
+- `GET /ping` - Health check
+- `GET /modules` - List all modules
+- `GET /tasks` - List all tasks
+- `POST /tasks/run` - Queue a task
+- `GET /tasks/{task_id}` - Get task status
 
 ## 📦 Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Language | Python 3.13+ |
-| Messaging | RabbitMQ |
-| Task Queue | Celery |
-| Web API | FastAPI |
-| CLI | Click + Rich |
-| Configuration | Pydantic |
-| Testing | Pytest |
-| Linting | Ruff + Black + Mypy |
+- **Language**: Python 3.13+
+- **Messaging**: RabbitMQ
+- **Task Queue**: Celery
+- **Web API**: FastAPI
+- **CLI**: Click + Rich
+- **Configuration**: Pydantic + YAML
 
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Update documentation
-5. Submit a pull request
-
-See [Contributing](Contributing) for detailed guidelines.
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
-## 🔗 Links
+## 🔗 Resources
 
 - [GitHub Repository](https://github.com/azcoigreach/nagatha_core)
-- [GitHub Discussions](https://github.com/azcoigreach/nagatha_core/discussions)
-- [Full Documentation](User-Guide)
+- [Documentation Index](Index)
+- [API Reference](User-Guide#api-documentation)
 
 ---
 

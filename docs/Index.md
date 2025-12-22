@@ -60,57 +60,6 @@
 
 ---
 
-## 📋 Reference Guides
-
-### [Build-Complete](Build-Complete)
-**Build Completion Report**
-- ✅ Features implemented
-- ✅ Getting started section
-- ✅ Module structure
-- ✅ Technology stack
-- ✅ Metrics
-- ✅ Next steps
-
-### [Phase1-Complete](Phase1-Complete)
-**Phase 1 Deliverables**
-- ✅ Project structure
-- ✅ Core features
-- ✅ Module system
-- ✅ Testing suite
-- ✅ Documentation
-- ✅ Tech stack summary
-
-### [File-Manifest](File-Manifest)
-**Complete File Listing**
-- ✅ All files created
-- ✅ File descriptions
-- ✅ Statistics
-- ✅ Size information
-
-### [Verification-Checklist](Verification-Checklist)
-**QA Verification**
-- ✅ Requirements checklist
-- ✅ Deliverables verification
-- ✅ Quality assurance
-- ✅ Final status
-
-### [Summary](Summary)
-**Build Summary**
-- ✅ Statistics
-- ✅ What was built
-- ✅ Quick start
-- ✅ Features overview
-
-### [Evaluation-Report](Evaluation-Report)
-**Application State Evaluation**
-- ✅ Codebase statistics
-- ✅ Component analysis
-- ✅ Testing coverage
-- ✅ Documentation assessment
-- ✅ Recommendations
-
----
-
 ## 🎯 Quick Reference
 
 ### API Endpoints
@@ -128,10 +77,10 @@ GET  /status/{id}          # Alias for /tasks/{id}
 ### CLI Commands
 ```
 nagatha run <task>              # Execute task
-nagatha list [modules|tasks]    # List items
+nagatha list                    # List all tasks
+nagatha modules                 # List modules
 nagatha status --task-id <id>   # Check status
 nagatha config [key]            # Show config
-nagatha modules                 # List modules
 nagatha worker                  # Start worker
 ```
 
@@ -201,25 +150,13 @@ celery -A nagatha_core.broker.celery_app worker
 ```
 
 ### Docker
-See deployment section in [User-Guide](User-Guide#monitoring)
+```bash
+docker-compose up -d           # Start all services
+docker-compose logs -f          # View logs
+docker-compose ps               # Check status
+```
 
-### Kubernetes
-Helm charts planned for Phase 2
-
----
-
-## 📊 Statistics
-
-| Metric | Value |
-|--------|-------|
-| Files | 31 total |
-| Python code | 1,385 lines |
-| Tests | 38 cases |
-| Documentation | 1,200+ lines |
-| API endpoints | 6 |
-| CLI commands | 6 |
-
-**Details:** [SUMMARY.md#-project-statistics](SUMMARY.md#-project-statistics)
+**Full Guide:** [Docker](Docker)
 
 ---
 
@@ -372,6 +309,7 @@ Built with:
 | [User-Guide](User-Guide) | Complete guide |
 | [Architecture](Architecture) | System design |
 | [Contributing](Contributing) | Development |
+| [Docker](Docker) | Docker setup and deployment |
 | [Summary](Summary) | Build summary |
 | [File-Manifest](File-Manifest) | File listing |
 | [Verification-Checklist](Verification-Checklist) | QA check |
@@ -379,9 +317,36 @@ Built with:
 
 ---
 
-**Last Updated:** October 20, 2025  
+**Last Updated:** December 22, 2025  
 **Status:** ✅ Complete and Production-Ready  
 
 *nagatha_core v0.1.0 - Modular AI Orchestration Framework*
 
 🚀 **Ready to build intelligent systems!**
+
+---
+
+## 📋 Changelog
+
+### Version 0.1.0 (December 22, 2025)
+
+#### Added
+- **Docker Support** - Full containerization with Docker Compose
+  - Multi-stage Dockerfile for optimized builds
+  - Docker Compose setup with 4 services (API, Worker, RabbitMQ, Redis)
+  - Health checks for all services
+  - Service discovery via Docker networking
+  - Volume mounting for external modules
+  - Non-root user execution for security
+  - Entrypoint script with service readiness checks
+  - See [Docker Guide](Docker) for complete documentation
+
+#### Improved
+- Updated documentation with current functionality
+- Cleaned up agent notes and temporary content
+- Updated .gitignore for Python projects
+- Corrected CLI command documentation
+
+#### Fixed
+- CLI command accuracy in documentation
+- Port forwarding and networking configuration
