@@ -1,0 +1,25 @@
+# Example docker-compose override file for local development
+# Copy this to docker-compose.override.yml and customize as needed
+
+version: '3.8'
+
+services:
+  api:
+    # Enable hot-reload for development
+    environment:
+      NAGATHA_API_RELOAD: "true"
+    volumes:
+      # Mount source code for live reload
+      - .:/app
+      # Mount modules for development
+      - ./nagatha_core/modules:/app/nagatha_core/modules
+
+  worker:
+    # Enable debug logging for development
+    environment:
+      NAGATHA_LOGGING_LEVEL: DEBUG
+    volumes:
+      # Mount source code
+      - .:/app
+      # Mount modules for development
+      - ./nagatha_core/modules:/app/nagatha_core/modules
