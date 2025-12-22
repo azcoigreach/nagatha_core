@@ -25,20 +25,19 @@ jobs:
         run: |
           # Clone the wiki repository
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki-repo || {
-            echo "Wiki repository not found. It will be created on first push."
+            echo "Wiki repository not found. Creating initial wiki repository."
             mkdir -p wiki-repo
             cd wiki-repo
             git init
             git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git
+            git checkout -b main || true
           }
       
       - name: Copy documentation files
         run: |
-          cd main-repo
-          
-          # Copy all markdown files from docs/ to wiki-repo/
+          # Copy all markdown files from main-repo/docs/ to wiki-repo/
           # Exclude README.md as it's not a wiki page
-          find docs -name "*.md" -type f ! -name "README.md" -exec cp {} wiki-repo/ \;
+          find main-repo/docs -name "*.md" -type f ! -name "README.md" -exec cp {} wiki-repo/ \;
           
           # Fix internal links to use wiki format (no .md extension)
           cd wiki-repo
