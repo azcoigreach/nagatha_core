@@ -80,8 +80,12 @@ def load_config_from_yaml(path: str) -> FrameworkConfig:
     except ImportError:
         raise ImportError("PyYAML is required to load YAML configs. Install with: pip install pyyaml")
     
-    if not Path(path).exists():
+    path_obj = Path(path)
+    if not path_obj.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
+    
+    if not path_obj.is_file():
+        raise ValueError(f"Config path is not a file: {path}")
     
     with open(path, 'r') as f:
         config_dict = yaml.safe_load(f)
@@ -94,12 +98,27 @@ def load_config_from_env() -> FrameworkConfig:
     Load configuration from environment variables.
     
     Environment variables should be prefixed with NAGATHA_
-    For nested configs, use dot notation: NAGATHA_CELERY_BROKER_URL
+    For nested configs, use underscore notation: NAGATHA_CELERY_BROKER_URL
+    
+    Examples:
+        NAGATHA_CELERY_BROKER_URL -> celery.broker_url
+        NAGATHA_API_PORT -> api.port
+        NAGATHA_LOGGING_LEVEL -> logging.level
     
     Returns:
         FrameworkConfig instance
     """
     config_dict: Dict[str, Any] = {}
+    
+    # Known nested structures - maps prefix to nested field names
+    # This handles cases where field names have underscores (e.g., broker_url)
+    nested_mappings = {
+        "celery": ["broker_url", "result_backend", "task_serializer", "accept_content", 
+                   "result_serializer", "task_track_started", "task_acks_late", 
+                   "worker_prefetch_multiplier", "worker_max_tasks_per_child"],
+        "api": ["host", "port", "reload", "workers", "debug"],
+        "logging": ["level", "format", "log_file"],
+    }
     
     # Parse NAGATHA_* environment variables
     for key, value in os.environ.items():
@@ -107,9 +126,24 @@ def load_config_from_env() -> FrameworkConfig:
             # Remove prefix and convert to lowercase
             config_key = key[8:].lower()  # Remove "NAGATHA_"
             
-            # Handle nested keys (e.g., celery_broker_url)
+            # Handle nested keys (e.g., celery_broker_url -> celery.broker_url)
             if "_" in config_key:
                 parts = config_key.split("_")
+                
+                # Check if this matches a known nested structure
+                if len(parts) >= 2:
+                    section = parts[0]
+                    # Reconstruct field name (e.g., ['celery', 'broker', 'url'] -> 'broker_url')
+                    field_name = "_".join(parts[1:])
+                    
+                    # Check if this section and field are known
+                    if section in nested_mappings and field_name in nested_mappings[section]:
+                        if section not in config_dict:
+                            config_dict[section] = {}
+                        config_dict[section][field_name] = value
+                        continue
+                
+                # Fallback: create nested structure from underscores
                 current = config_dict
                 for part in parts[:-1]:
                     if part not in current:
@@ -167,12 +201,13 @@ def get_config() -> FrameworkConfig:
         FrameworkConfig instance
     """
     # Check for local config
-    if Path("nagatha.yaml").exists():
+    local_config = Path("nagatha.yaml")
+    if local_config.exists() and local_config.is_file():
         return load_config("nagatha.yaml")
     
     # Check for home directory config
     home_config = Path.home() / ".nagatha" / "config.yaml"
-    if home_config.exists():
+    if home_config.exists() and home_config.is_file():
         return load_config(str(home_config))
     
     # Fall back to environment and defaults
