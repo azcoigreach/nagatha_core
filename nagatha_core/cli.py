@@ -247,14 +247,13 @@ def worker():
     Starts a worker process to execute queued tasks.
     """
     try:
-        cfg = get_config()
         celery_app = get_celery_app()
         
         console.print("[cyan]Starting Celery worker...[/cyan]")
+        console.print("[yellow]Note: RabbitMQ and Redis must be running for tasks to execute[/yellow]")
         celery_app.worker_main([
             "worker",
             "--loglevel=info",
-            f"--broker={cfg.celery.broker_url}",
         ])
     
     except Exception as e:

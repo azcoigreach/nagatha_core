@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # RabbitMQ message broker
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: nagatha_rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nagatha_network
+
+  # Redis result backend
+  redis:
+    image: redis:7-alpine
+    container_name: nagatha_redis
+    hostname: redis
+    ports:
+      - "6380:6379"  # External port 6380, internal 6379
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nagatha_network
+
+  # nagatha_core API server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nagatha_api
+    hostname: api
+    ports:
+      - "8000:8000"
+    environment:
+      # Override broker URLs to use service names
+      NAGATHA_CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      NAGATHA_CELERY_RESULT_BACKEND: redis://redis:6379/0
+      NAGATHA_API_HOST: 0.0.0.0
+      NAGATHA_API_PORT: 8000
+      NAGATHA_API_RELOAD: "false"
+      NAGATHA_LOGGING_LEVEL: INFO
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Mount modules directory for external modules
+      - ./nagatha_core/modules:/app/nagatha_core/modules:ro
+      # Optional: mount custom config
+      - ./nagatha.yaml:/app/nagatha.yaml:ro
+    networks:
+      - nagatha_network
+    restart: unless-stopped
+
+  # nagatha_core Celery worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nagatha_worker
+    hostname: worker
+    environment:
+      # Override broker URLs to use service names
+      NAGATHA_CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      NAGATHA_CELERY_RESULT_BACKEND: redis://redis:6379/0
+      NAGATHA_LOGGING_LEVEL: INFO
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    volumes:
+      # Mount modules directory for external modules
+      - ./nagatha_core/modules:/app/nagatha_core/modules:ro
+    command: ["nagatha", "worker"]
+    networks:
+      - nagatha_network
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  nagatha_network:
+    driver: bridge

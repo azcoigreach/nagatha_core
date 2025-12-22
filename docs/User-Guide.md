@@ -99,13 +99,13 @@ nagatha_core/
 
 ```bash
 # List available modules
-nagatha list modules
+nagatha modules
 
 # List all tasks
 nagatha list
 
 # Run a task
-nagatha run echo_bot.echo --kwargs message="Hello, World!"
+nagatha run echo_bot.echo -k message="Hello, World!"
 
 # Check task status
 nagatha status --task-id <task-id>
@@ -113,6 +113,9 @@ nagatha status --task-id <task-id>
 # Show configuration
 nagatha config
 nagatha config api.port
+
+# Start Celery worker
+nagatha worker
 ```
 
 ### Using the API
@@ -408,13 +411,18 @@ nagatha run echo_bot.echo -k message="Hello World"
 nagatha run echo_bot.echo --kwargs message="Test" --json
 ```
 
-### `nagatha list [modules|tasks]`
-List modules or tasks.
+### `nagatha modules`
+List all registered modules with their metadata.
 
 ```bash
-nagatha list modules
-nagatha list tasks
-nagatha list              # Default: list tasks
+nagatha modules
+```
+
+### `nagatha list`
+List all available tasks grouped by module.
+
+```bash
+nagatha list
 ```
 
 ### `nagatha status --task-id <id>`
@@ -491,7 +499,7 @@ http://localhost:15672
 4. Check logs: `NAGATHA_LOGGING_LEVEL=DEBUG`
 
 ### Task not found
-1. Run `nagatha list tasks` to see registered tasks
+1. Run `nagatha list` to see registered tasks
 2. Use full task name: `module_name.task_name`
 3. Restart worker after adding new modules
 

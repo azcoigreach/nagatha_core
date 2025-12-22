@@ -19,28 +19,61 @@
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Docker (Recommended)
+
+The easiest way to get started is using Docker Compose:
+
+```bash
+# Clone the repository
+git clone https://github.com/azcoigreach/nagatha_core
+cd nagatha_core
+
+# Start all services (API, Worker, RabbitMQ, Redis)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Access the API
+curl http://localhost:8000/ping
+
+# Run a task via API
+curl -X POST http://localhost:8000/tasks/run \
+  -H "Content-Type: application/json" \
+  -d '{"task_name": "echo_bot.echo", "kwargs": {"message": "Hello from Docker"}}'
+```
+
+**Access Points:**
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- RabbitMQ Management: http://localhost:15672 (guest/guest)
+
+See [Docker Guide](docs/Docker.md) for detailed Docker documentation.
+
+### Option 2: Local Installation
+
+#### Prerequisites
 - Python 3.13+
 - RabbitMQ (or use Docker)
 - Redis (result backend)
 
-### Installation
+#### Installation
 ```bash
 git clone https://github.com/azcoigreach/nagatha_core
 cd nagatha_core
 pip install -e ".[dev]"
 ```
 
-### Run the Framework
+#### Run the Framework
 ```bash
 # Terminal 1: Start API server
 python -m uvicorn nagatha_core.main:app --reload
 
 # Terminal 2: Start Celery worker
-celery -A nagatha_core.broker.celery_app worker --loglevel=info
+nagatha worker
 
 # Terminal 3: Use CLI
-nagatha list modules
+nagatha modules
 nagatha run echo_bot.echo -k message="Hello"
 ```
 
@@ -126,21 +159,23 @@ pytest tests/test_echo_bot.py -v
 ## 🔧 CLI Commands
 
 ```bash
-# List modules and tasks
-nagatha list modules
-nagatha list tasks
+# List modules
+nagatha modules
+
+# List all tasks
+nagatha list
 
 # Run a task
-nagatha run <task_name> --kwargs key=value
+nagatha run <task_name> -k key=value
 
-# Check status
+# Check task status
 nagatha status --task-id <id>
 
 # View configuration
 nagatha config
 nagatha config api.port
 
-# Start worker
+# Start Celery worker
 nagatha worker
 ```
 
@@ -183,6 +218,27 @@ Contributions are welcome! Please:
 4. Update documentation
 5. Submit a pull request
 
+## 🐳 Docker
+
+nagatha_core is fully containerized for easy deployment and development:
+
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Scale workers
+docker-compose up -d --scale worker=3
+```
+
+See [DOCKER.md](DOCKER.md) for complete Docker documentation including:
+- Development setup with hot-reload
+- Production deployment
+- External module integration
+- Troubleshooting
+
 ## 📄 License
 
 MIT License - see LICENSE file for details
@@ -193,6 +249,7 @@ MIT License - see LICENSE file for details
 - [GitHub Wiki](https://github.com/azcoigreach/nagatha_core/wiki) - Full documentation (auto-synced from `docs/`)
 - [GitHub Discussions](https://github.com/azcoigreach/nagatha_core/discussions)
 - [User Guide](docs/User-Guide.md) - Complete setup and usage guide
+- [Docker Guide](docs/Docker.md) - Docker setup and deployment
 - [Documentation Index](docs/Index.md) - All documentation pages
 
 ---
