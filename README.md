@@ -123,25 +123,55 @@ curl -X POST http://localhost:8000/tasks/run \
 
 ```
 nagatha_core/
-├── main.py              # FastAPI application
-├── broker.py            # Celery configuration
-├── config.py            # Configuration loading
-├── cli.py               # Click CLI commands
-├── registry.py          # Module discovery
-├── types.py             # Shared types
-├── logging.py           # Logging setup
-├── modules/             # Sub-mind modules
-│   └── echo_bot/        # Example module
-├── ai/                  # AI integration
-├── tests/               # Pytest tests
-└── docs/                # Documentation (auto-synced to GitHub Wiki)
-    ├── Home.md          # Wiki home page
-    ├── User-Guide.md    # Complete user guide
-    ├── Architecture.md  # System architecture
-    ├── Contributing.md  # Development guidelines
-    ├── Index.md         # Documentation index
-    └── ...              # Additional reference docs
+├── contracts/           # 🔖 Types, protocols, and interfaces
+│   ├── types.py         #    Shared data structures (TaskStatus, etc.)
+│   └── protocols.py     #    ABCs for EventBus, Stores, Agents, etc.
+├── runtime/             # ⚙️ Core infrastructure factories
+│   ├── settings.py      #    Pydantic settings with env var support
+│   ├── celery_app.py    #    Celery application factory
+│   └── redis_client.py  #    Redis client factory
+├── events/              # 📨 Event-driven messaging
+│   ├── envelope.py      #    EventEnvelope data structure
+│   └── bus.py           #    InMemoryEventBus & RedisEventBus
+├── agent/               # 🤖 Agent scaffolding
+│   ├── base.py          #    BaseAgent abstract class
+│   └── runner.py        #    AgentRunner with observability
+├── observability/       # 👁️ Logging and tracing
+│   ├── logging.py       #    Structured logging utilities
+│   └── tracing.py       #    Correlation ID tracking
+├── modules/             # 🧩 Sub-mind modules
+│   └── echo_bot/        #    Example module
+├── ai/                  # 🧠 AI integration
+├── main.py              # 🌐 FastAPI application
+├── broker.py            # 📮 Celery configuration (delegates to runtime)
+├── config.py            # ⚙️ Configuration loading (legacy compat)
+├── cli.py               # 💻 Click CLI commands
+├── registry.py          # 📋 Module discovery
+├── types.py             # 📦 Shared types (re-exports from contracts)
+├── logging.py           # 📝 Logging setup (re-exports from observability)
+├── tests/               # ✅ Pytest tests
+└── docs/                # 📚 Documentation (auto-synced to GitHub Wiki)
+  ├── Home.md          #    Wiki home page
+  ├── User-Guide.md    #    Complete user guide
+  ├── Architecture.md  #    System architecture
+  ├── Contributing.md  #    Development guidelines
+  └── Index.md         #    Documentation index
 ```
+
+### What Belongs in Core vs Extensions
+
+**Core Packages** (part of nagatha_core):
+- `contracts/` - Interfaces that all components must follow
+- `runtime/` - Infrastructure setup (Celery, Redis, settings)
+- `events/` - Event messaging primitives
+- `agent/` - Base agent implementations
+- `observability/` - Logging and tracing
+
+**Extensions** (separate modules/packages):
+- Custom agents implementing `BaseAgent`
+- Domain-specific event handlers
+- Custom storage implementations
+- Business logic and workflows
 
 ## 🧪 Testing
 

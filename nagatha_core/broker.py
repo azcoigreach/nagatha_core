@@ -3,6 +3,9 @@ Celery application and RabbitMQ broker configuration.
 
 Initializes the Celery app with RabbitMQ broker and Redis result backend.
 Handles task registration and execution configuration.
+
+This module now delegates to nagatha_core.runtime for core functionality
+while maintaining backwards compatibility.
 """
 
 from celery import Celery
@@ -10,17 +13,22 @@ from celery.signals import task_prerun, task_postrun, task_failure
 
 from .config import get_config
 from .logging import get_logger
+from .runtime import get_celery_instance, setup_celery_signals
+from .observability.tracing import get_correlation_id, set_correlation_id, generate_correlation_id
 
 logger = get_logger(__name__)
 
-# Initialize Celery app
-celery_app = Celery("nagatha_core")
+# Use the runtime celery instance
+celery_app = get_celery_instance()
 
-# Load configuration
+# Setup signal handlers with logging
+setup_celery_signals(logger_func=logger.info)
+
+# Load configuration and update celery
 config = get_config()
 celery_config = config.celery
 
-# Configure Celery
+# Configure Celery (in case not done via runtime)
 celery_app.conf.update(
     broker_url=celery_config.broker_url,
     result_backend=celery_config.result_backend,
@@ -37,22 +45,17 @@ celery_app.conf.update(
 )
 
 
+# Additional signal handlers for correlation ID propagation
 @task_prerun.connect
-def on_task_prerun(sender=None, task_id=None, task=None, **kwargs):
-    """Log task start."""
-    logger.info(f"Task started: {task.name} (ID: {task_id})")
-
-
-@task_postrun.connect
-def on_task_postrun(sender=None, task_id=None, task=None, result=None, state=None, **kwargs):
-    """Log task completion."""
-    logger.info(f"Task completed: {task.name} (ID: {task_id}, State: {state})")
-
-
-@task_failure.connect
-def on_task_failure(sender=None, task_id=None, exception=None, einfo=None, **kwargs):
-    """Log task failure."""
-    logger.error(f"Task failed: {task_id}, Exception: {exception}")
+def inject_correlation_id(sender=None, task_id=None, task=None, kwargs=None, **other_kwargs):
+    """Inject correlation ID into task context."""
+    # Extract correlation_id from task kwargs or generate new one
+    correlation_id = kwargs.get("correlation_id") if kwargs else None
+    if not correlation_id:
+        correlation_id = generate_correlation_id()
+    
+    set_correlation_id(correlation_id)
+    logger.info(f"Task {task.name} starting with correlation_id: {correlation_id[:8]}...")
 
 
 def get_celery_app() -> Celery:

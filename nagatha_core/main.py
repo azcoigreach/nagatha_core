@@ -7,7 +7,8 @@ Serves the HTTP API for task invocation, module discovery, and status tracking.
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .config import get_config
@@ -15,6 +16,13 @@ from .registry import get_registry, initialize_registry
 from .types import TaskRequest, TaskStatus
 from .logging import get_logger, configure_logging
 from .broker import get_celery_app
+from .observability.tracing import (
+    extract_correlation_id_from_headers,
+    set_correlation_id,
+    get_correlation_id,
+    generate_correlation_id,
+    clear_correlation_id,
+)
 
 logger = get_logger(__name__)
 
@@ -79,6 +87,34 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+# Correlation ID Middleware
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    """
+    Middleware to handle correlation ID for all requests.
+    
+    Extracts or generates correlation ID and adds it to response headers.
+    """
+    # Extract from headers or generate new
+    correlation_id = extract_correlation_id_from_headers(dict(request.headers))
+    if not correlation_id:
+        correlation_id = generate_correlation_id()
+    
+    # Set in context
+    set_correlation_id(correlation_id)
+    
+    # Process request
+    response = await call_next(request)
+    
+    # Add to response headers
+    response.headers["X-Correlation-ID"] = correlation_id
+    
+    # Clear context
+    clear_correlation_id()
+    
+    return response
 
 
 @app.get("/ping", response_model=HealthResponse)
