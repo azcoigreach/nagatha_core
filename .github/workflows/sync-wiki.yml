@@ -24,14 +24,31 @@ jobs:
       - name: Clone wiki repository
         run: |
           # Clone the wiki repository
-          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki-repo || {
+          if git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki-repo 2>&1; then
+            echo "Wiki repository cloned successfully"
+            cd wiki-repo
+            # Detect the default branch (master or main)
+            # Try to get the current branch, or check remote branches
+            WIKI_BRANCH=$(git branch --show-current 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null)
+            if [ -z "$WIKI_BRANCH" ] || [ "$WIKI_BRANCH" = "HEAD" ]; then
+              # Check remote branches
+              REMOTE_BRANCH=$(git ls-remote --heads origin | head -1 | sed 's/.*refs\/heads\///')
+              WIKI_BRANCH=${REMOTE_BRANCH:-master}
+            fi
+            echo "Detected wiki branch: $WIKI_BRANCH"
+            echo "WIKI_BRANCH=$WIKI_BRANCH" >> $GITHUB_ENV
+            git checkout $WIKI_BRANCH 2>/dev/null || git checkout -b $WIKI_BRANCH
+          else
             echo "Wiki repository not found. Creating initial wiki repository."
             mkdir -p wiki-repo
             cd wiki-repo
             git init
             git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git
-            git checkout -b main || true
-          }
+            # GitHub wikis typically use master as default
+            WIKI_BRANCH="master"
+            git checkout -b master || git checkout -b main
+            echo "WIKI_BRANCH=$WIKI_BRANCH" >> $GITHUB_ENV
+          fi
       
       - name: Copy documentation files
         run: |
@@ -50,16 +67,41 @@ jobs:
           cd wiki-repo
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Ensure we're on the correct branch
+          if [ -n "$WIKI_BRANCH" ]; then
+            git checkout $WIKI_BRANCH 2>/dev/null || echo "Branch $WIKI_BRANCH already checked out or doesn't exist yet"
+          fi
       
       - name: Commit and push changes
         run: |
           cd wiki-repo
           
+          # Detect branch if not already set
+          if [ -z "$WIKI_BRANCH" ]; then
+            WIKI_BRANCH=$(git branch --show-current 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+          fi
+          echo "Using wiki branch: $WIKI_BRANCH"
+          
           # Initialize git if needed
           if [ ! -d .git ]; then
             git init
             git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git
-            git checkout -b main || git branch -M main
+            git checkout -b $WIKI_BRANCH || git branch -M $WIKI_BRANCH
+          fi
+          
+          # Pull latest changes to avoid conflicts (if branch exists remotely)
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --heads origin $WIKI_BRANCH | grep -q $WIKI_BRANCH; then
+            echo "Pulling latest changes from origin/$WIKI_BRANCH"
+            git pull origin $WIKI_BRANCH --no-rebase --allow-unrelated-histories || {
+              echo "Pull failed, attempting merge strategy"
+              git fetch origin $WIKI_BRANCH
+              git merge origin/$WIKI_BRANCH --allow-unrelated-histories -m "Merge remote changes" || true
+            }
+          else
+            echo "Branch $WIKI_BRANCH doesn't exist remotely yet"
           fi
           
           git add -A
@@ -74,11 +116,12 @@ jobs:
             Triggered by commit: ${{ github.sha }}
             Workflow run: ${{ github.run_id }}"
             
-            # Push to wiki repository
-            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git HEAD:main || {
-              echo "Push failed. This might be the first push to the wiki."
-              git push -u https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git HEAD:main
+            # Push to wiki repository using the detected branch
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git HEAD:$WIKI_BRANCH || {
+              echo "Push failed. Trying with -u flag."
+              git push -u https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git HEAD:$WIKI_BRANCH
             }
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKI_BRANCH: ${{ env.WIKI_BRANCH }}
