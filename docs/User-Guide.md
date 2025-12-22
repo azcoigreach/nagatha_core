@@ -55,7 +55,7 @@ nagatha_core/
 │   ├── test_echo_bot.py
 │   └── test_ai.py
 └── docs/
-    └── index.md          # This documentation
+    └── Home.md           # This documentation
 ```
 
 ## 🚀 Quick Start

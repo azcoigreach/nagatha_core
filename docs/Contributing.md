@@ -128,7 +128,7 @@ def test_echo_bot_echo_returns_prefixed_message():
 Update docs when making changes:
 
 - **Code**: Add docstrings to functions/classes
-- **Features**: Update `docs/index.md`
+- **Features**: Update `docs/Home.md`
 - **Modules**: Add `README.md` to module directory
 - **Architecture**: Update `ARCHITECTURE.md` for design changes
 
@@ -330,7 +330,7 @@ Any configuration options.
 
 ### API Documentation
 
-Update `docs/index.md`:
+Update `docs/Home.md`:
 
 ```markdown
 #### POST /new-endpoint
@@ -416,7 +416,7 @@ Other approaches?
 
 3. **Update documentation:**
    - Docstrings in code
-   - `docs/index.md` if feature changes
+   - `docs/Home.md` if feature changes
    - Module `README.md` if module changes
 
 4. **Create PR with clear description:**
