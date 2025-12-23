@@ -203,3 +203,48 @@ class ModuleInfo(BaseModel):
             ]
         }
     }
+
+
+# Provider API Schemas
+
+class ProviderRegisterRequest(BaseModel):
+    """Request body to register a provider."""
+
+    provider_id: str = Field(..., example="image_service")
+    base_url: str = Field(..., example="http://image-service:8080")
+    manifest_url: Optional[str] = Field(
+        default=None, example="http://image-service:8080/.well-known/nagatha/manifest"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "provider_id": "echo_provider",
+                    "base_url": "http://echo:8001",
+                }
+            ]
+        }
+    }
+
+
+class ProviderTaskSummary(BaseModel):
+    name: str
+    provider_id: str
+    version: Optional[str] = None
+    description: Optional[str] = None
+    input_schema: Optional[Dict[str, Any]] = None
+    output_schema: Optional[Dict[str, Any]] = None
+    queue: Optional[str] = None
+    retries: Optional[int] = None
+    timeout_s: Optional[int] = None
+
+
+class ProviderInfoResponse(BaseModel):
+    provider_id: str
+    base_url: str
+    manifest_url: str
+    version: str
+    last_seen: Optional[str] = None
+    tasks: List[ProviderTaskSummary] = Field(default_factory=list)
+
