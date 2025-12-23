@@ -5,48 +5,19 @@ Serves the HTTP API for task invocation, module discovery, and status tracking.
 """
 
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from .config import get_config
-from .registry import get_registry, initialize_registry
-from .types import TaskRequest, TaskStatus
+from .registry import initialize_registry
 from .logging import get_logger, configure_logging
-from .broker import get_celery_app
+from .api.schemas import ErrorResponse
+from .api import v1 as v1_routes
 
 logger = get_logger(__name__)
-
-
-# Pydantic models for API
-class RunTaskRequest(BaseModel):
-    """Request model for running a task."""
-    task_name: str
-    kwargs: Dict[str, Any] = {}
-
-
-class TaskStatusResponse(BaseModel):
-    """Response model for task status."""
-    task_id: str
-    status: str
-    result: Any = None
-    error: str | None = None
-
-
-class ModuleInfo(BaseModel):
-    """Response model for module information."""
-    name: str
-    description: str
-    version: str
-    tasks: Dict[str, Any] = {}
-    has_heartbeat: bool = False
-
-
-class HealthResponse(BaseModel):
-    """Response model for health check."""
-    status: str
-    version: str
 
 
 # Lifespan context manager
@@ -81,124 +52,62 @@ app = FastAPI(
 )
 
 
-@app.get("/ping", response_model=HealthResponse)
-async def ping():
-    """
-    Health check endpoint.
-    
-    Returns:
-        Health status
-    """
-    return {
-        "status": "healthy",
-        "version": "0.1.0",
-    }
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Attach a request ID to all responses."""
+    request_id = request.headers.get("X-Request-ID", f"req_{uuid4().hex}")
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
-@app.get("/modules", response_model=Dict[str, ModuleInfo])
-async def list_modules():
-    """
-    List all registered modules and their tasks.
-    
-    Returns:
-        Dictionary of module information
-    """
-    registry = get_registry()
-    modules = registry.list_modules()
-    
-    result = {}
-    for name, metadata in modules.items():
-        result[name] = ModuleInfo(
-            name=metadata.name,
-            description=metadata.description,
-            version=metadata.version,
-            tasks=metadata.tasks,
-            has_heartbeat=metadata.has_heartbeat,
-        )
-    
-    return result
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return consistent validation error responses."""
+    request_id = getattr(request.state, "request_id", f"req_{uuid4().hex}")
+    payload = ErrorResponse(
+        code="validation_error",
+        message="Request validation failed.",
+        details=exc.errors(),
+        request_id=request_id,
+    )
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=payload.model_dump())
 
 
-@app.get("/tasks")
-async def list_tasks():
-    """
-    List all available tasks grouped by module.
-    
-    Returns:
-        Dictionary mapping modules to their tasks
-    """
-    registry = get_registry()
-    return registry.list_tasks()
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Return consistent HTTP error responses."""
+    request_id = getattr(request.state, "request_id", f"req_{uuid4().hex}")
+    details = exc.detail if not isinstance(exc.detail, str) else None
+    message = exc.detail if isinstance(exc.detail, str) else "Request failed."
+    payload = ErrorResponse(
+        code="http_error",
+        message=message,
+        details=details,
+        request_id=request_id,
+    )
+    return JSONResponse(status_code=exc.status_code, content=payload.model_dump())
 
 
-@app.post("/tasks/run")
-async def run_task(request: RunTaskRequest, background_tasks: BackgroundTasks):
-    """
-    Queue a task for execution.
-    
-    Args:
-        request: Task request with name and kwargs
-        background_tasks: Background tasks context
-        
-    Returns:
-        Task ID and status
-        
-    Raises:
-        HTTPException: If task not found
-    """
-    if not request.task_name:
-        raise HTTPException(status_code=400, detail="task_name is required")
-    
-    registry = get_registry()
-    task = registry.get_task(request.task_name)
-    
-    if not task:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Task not found: {request.task_name}",
-        )
-    
-    try:
-        task_id = registry.run_task(request.task_name, **request.kwargs)
-        return {
-            "task_id": task_id,
-            "status": TaskStatus.PENDING.value,
-            "task_name": request.task_name,
-        }
-    except Exception as e:
-        logger.error(f"Error running task: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Return consistent unexpected error responses."""
+    request_id = getattr(request.state, "request_id", f"req_{uuid4().hex}")
+    logger.error("Unhandled exception: %s", exc)
+    payload = ErrorResponse(
+        code="internal_error",
+        message="Unexpected server error.",
+        details=str(exc),
+        request_id=request_id,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=payload.model_dump(),
+    )
 
 
-@app.get("/tasks/{task_id}")
-async def get_task_status(task_id: str):
-    """
-    Get the status of a running task.
-    
-    Args:
-        task_id: Celery task ID
-        
-    Returns:
-        Task status and result
-    """
-    registry = get_registry()
-    task_result = registry.get_task_status(task_id)
-    
-    return task_result.to_dict()
-
-
-@app.get("/status/{task_id}")
-async def get_status(task_id: str):
-    """
-    Alias for /tasks/{task_id}.
-    
-    Args:
-        task_id: Celery task ID
-        
-    Returns:
-        Task status and result
-    """
-    return await get_task_status(task_id)
+app.include_router(v1_routes.router)
 
 
 if __name__ == "__main__":

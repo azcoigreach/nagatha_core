@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  provider_hello:
+    build:
+      context: ../provider_hello
+    environment:
+      CORE_URL: http://localhost:8000/api/v1
+      PROVIDER_ID: hello_provider
+      PROVIDER_BASE_URL: http://provider_hello:9000
+      BROKER_URL: amqp://guest:guest@localhost:5672//
+      RESULT_BACKEND: redis://localhost:6380/0
+      QUEUE_NAME: hello
+    command: ["sh", "-c", "python /app/register.py & uvicorn app:app --host 0.0.0.0 --port 9000"]
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:9000/health',timeout=3).status==200 else 1)\"" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  provider_hello_worker:
+    build:
+      context: ../provider_hello
+    environment:
+      BROKER_URL: amqp://guest:guest@localhost:5672//
+      RESULT_BACKEND: redis://localhost:6380/0
+      QUEUE_NAME: hello
+    command: ["sh", "-c", "celery -A tasks.app worker -Q $QUEUE_NAME -l info"]
+    depends_on:
+      provider_hello:
+        condition: service_healthy
+
+networks:
+  default:
+    name: nagatha_dev_net
+*** End Patch
