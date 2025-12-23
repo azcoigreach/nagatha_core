@@ -1,25 +1,30 @@
 # nagatha_core
 
-> **Modular AI Orchestration Framework** - A Python 3.13+ framework for managing autonomous AI-driven submodules via a central orchestration system.
+> **Nagatha Core Services** – Docker-first orchestration stack that hosts shared Nagatha resources (API, Celery workers, RabbitMQ, Redis) for all Nagatha applications. Core is a running service hub, not a pip-installable library.
 
 ![Python Version](https://img.shields.io/badge/python-3.13%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-Alpha-yellow)
 
+## 🎯 Project Intent
+
+Nagatha Core is the long-running control plane for all Nagatha projects:
+- Runs via Docker Compose; exposes shared infrastructure (RabbitMQ, Redis, API, workers).
+- Core modules live in this repo and are the only shared tasks distributed to other Nagatha services.
+- Other Nagatha apps connect over the network (HTTP + queues) to consume core services; they do **not** import this codebase.
+- Local `pip install` usage is for contributors only; production integrations talk to the running stack.
+
 ## 🎯 Features
 
-- ✅ **Modular + Pluggable** - Each sub-mind is self-contained and registerable
-- ✅ **Async-First** - Built on FastAPI, Celery, and modern async/await
-- ✅ **RabbitMQ Integration** - Robust message queuing for task distribution
-- ✅ **REST API** - FastAPI with automatic OpenAPI documentation
-- ✅ **CLI Tool** - Rich command-line interface for task management
+- ✅ **Service Hub** - Shared RabbitMQ, Redis, API, and Celery workers shipped together
+- ✅ **Modular + Pluggable** - Core-managed modules registered and served from this repo
+- ✅ **Async-First** - FastAPI + Celery with modern async/await
+- ✅ **REST API + Queues** - Two integration paths for other Nagatha services
 - ✅ **Dynamic Module Loading** - Discover and register modules at runtime
 - ✅ **Comprehensive Testing** - Pytest coverage across all components
 - ✅ **Production Ready** - Configuration, logging, error handling
 
-## 🚀 Quick Start
-
-### Option 1: Docker (Recommended)
+## 🚀 Quick Start (Docker-First)
 
 The easiest way to get started is using Docker Compose:
 
@@ -50,32 +55,16 @@ curl -X POST http://localhost:8000/tasks/run \
 
 See [Docker Guide](docs/Docker.md) for detailed Docker documentation.
 
-### Option 2: Local Installation
+### Local Development (contributors only)
 
-#### Prerequisites
-- Python 3.13+
-- RabbitMQ (or use Docker)
-- Redis (result backend)
-
-#### Installation
 ```bash
 git clone https://github.com/azcoigreach/nagatha_core
 cd nagatha_core
-pip install -e ".[dev]"
-```
-
-#### Run the Framework
-```bash
-# Terminal 1: Start API server
+pip install -e ".[dev]"  # for dev/debugging; not for production integration
 python -m uvicorn nagatha_core.main:app --reload
-
-# Terminal 2: Start Celery worker
-nagatha worker
-
-# Terminal 3: Use CLI
-nagatha modules
-nagatha run echo_bot.echo -k message="Hello"
+celery -A nagatha_core.broker.celery_app worker --loglevel=info
 ```
+Use this mode only for contributing changes; other Nagatha services should consume the Dockerized core over the network.
 
 ## 📚 Documentation
 
@@ -91,7 +80,6 @@ All documentation is in the [`docs/`](docs/) folder and automatically synced to 
 - [API Reference](docs/User-Guide.md#api-documentation) - Endpoint documentation
 - [Module Development](docs/User-Guide.md#module-development) - Create custom modules
 - [Configuration](docs/User-Guide.md#configuration) - Configuration options
-- [Documentation Index](docs/Index.md) - Complete documentation index
 
 ## 🧩 Example: Running a Task
 
@@ -143,16 +131,11 @@ nagatha_core/
     └── ...              # Additional reference docs
 ```
 
-## 🧪 Testing
+## 🧪 Testing (for contributors)
 
 ```bash
-# Run all tests
 pytest tests/ -v
-
-# Run with coverage
 pytest tests/ --cov=nagatha_core
-
-# Run specific test
 pytest tests/test_echo_bot.py -v
 ```
 
@@ -179,22 +162,41 @@ nagatha config api.port
 nagatha worker
 ```
 
-## 🤖 Creating a Custom Module
-
-1. Create a module directory in `nagatha_core/modules/`
-2. Add `__init__.py` with task functions and `register_tasks`
-3. Add `config.yaml` for module metadata
-4. Restart or trigger module discovery
-
-Example:
-```python
-# my_module/__init__.py
 def my_task(data: str) -> str:
-    return f"Processed: {data}"
+## 🌉 Integrating Other Nagatha Services
 
-def register_tasks(registry):
-    registry.register_task("my_module", "my_task", my_task)
+Core ships its own maintained modules (e.g., `echo_bot`) and exposes them over queues and HTTP. Other Nagatha apps should connect to the running core stack instead of importing code.
+
+**Steps:**
+1) Bring up Nagatha Core via Docker Compose (see Quick Start).
+2) Configure your external service with the shared endpoints:
+```bash
+export CELERY_BROKER_URL="amqp://guest:guest@localhost:5672//"
+export CELERY_RESULT_BACKEND="redis://localhost:6379/0"
+export NAGATHA_CORE_API="http://localhost:8000"
 ```
+3) From another service, call core tasks directly on the broker:
+```python
+from celery import Celery
+
+app = Celery(
+  "my_nagatha_service",
+  broker="amqp://guest:guest@localhost:5672//",
+  backend="redis://localhost:6379/0",
+)
+
+# Send work to a core-hosted task
+result = app.send_task("echo_bot.echo", kwargs={"message": "hi from another service"})
+print(result.get(timeout=10))
+```
+4) Or use the REST API from any language:
+```bash
+curl -X POST "$NAGATHA_CORE_API/tasks/run" \
+  -H "Content-Type: application/json" \
+  -d '{"task_name": "echo_bot.echo", "kwargs": {"message": "hi"}}'
+```
+
+**Docker networking tip:** If your external service is in the same compose project, use the service names (e.g., `broker`, `redis`, `api`) instead of `localhost` in the URLs.
 
 ## 📦 Tech Stack
 
@@ -250,7 +252,6 @@ MIT License - see LICENSE file for details
 - [GitHub Discussions](https://github.com/azcoigreach/nagatha_core/discussions)
 - [User Guide](docs/User-Guide.md) - Complete setup and usage guide
 - [Docker Guide](docs/Docker.md) - Docker setup and deployment
-- [Documentation Index](docs/Index.md) - All documentation pages
 
 ---
 

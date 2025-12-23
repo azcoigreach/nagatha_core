@@ -1,18 +1,15 @@
-# nagatha_core - Modular AI Orchestration Framework
+# nagatha_core - User Guide
 
 **Version:** 0.1.0
 
-A modular, async-first Python 3.13+ framework designed to manage a network of autonomous AI-driven submodules via a central orchestration system using RabbitMQ and Celery.
+Nagatha Core is the Docker-first services hub (API, Celery workers, RabbitMQ, Redis) that other Nagatha applications talk to over the network. Core ships its own modules and is not intended to be imported as a library in downstream projects; `pip install` is for contributors and debugging only.
 
 ## 🎯 Overview
 
-nagatha_core is the master coordination framework that:
-
-- **Loads submodules dynamically** at runtime from configured paths
-- **Dispatches tasks** through RabbitMQ message queue with Celery
-- **Provides CLI and web interfaces** for task invocation and monitoring
-- **Integrates AI functionality** for summarization, analysis, and automation
-- **Serves as the backbone** of a distributed, intelligent automation system
+- Runs as a Docker Compose stack: API, worker, RabbitMQ broker, Redis backend
+- Hosts core-maintained modules (e.g., `echo_bot`) shared across Nagatha services
+- Exposes integration surfaces via HTTP and RabbitMQ/Celery queues
+- CLI and direct Python usage are for contributors; consumers connect over the network
 
 ## 🧱 Tech Stack
 
@@ -26,7 +23,6 @@ nagatha_core is the master coordination framework that:
 | Config | Pydantic + dotenv/YAML |
 | Logging | Structured logging with file support |
 | Testing | Pytest + HTTPX + pytest-asyncio |
-| Package Manager | pip / uv |
 
 ## 📁 Project Structure
 
@@ -39,122 +35,98 @@ nagatha_core/
 ├── registry.py           # Module discovery and task registration
 ├── types.py              # Shared data structures and typing
 ├── logging.py            # Unified structured logging
-├── modules/              # Drop-in sub-mind modules
+├── modules/              # Core sub-mind modules (shared)
 │   └── echo_bot/
-│       ├── __init__.py
-│       └── config.yaml
 ├── ai/                   # AI integration modules
-│   ├── __init__.py
-│   └── prompt_templates/
-├── tests/                # Pytest tests
-│   ├── conftest.py
-│   ├── test_types.py
-│   ├── test_config.py
-│   ├── test_registry.py
-│   ├── test_logging.py
-│   ├── test_echo_bot.py
-│   └── test_ai.py
-└── docs/
-    └── Home.md           # This documentation
+└── docs/                 # Documentation
 ```
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Docker-first)
 
-### Prerequisites
-
-- Python 3.13+
-- RabbitMQ (or use Docker)
-- Redis (for result backend)
-
-### Installation
-
-1. **Clone the repository:**
-   ```bash
-   git clone <repo-url>
-   cd nagatha_core
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Start RabbitMQ and Redis** (using Docker):
-   ```bash
-   docker run -d -p 5672:5672 -p 15672:15672 rabbitmq:3-management
-   docker run -d -p 6379:6379 redis:latest
-   ```
-
-4. **Start the FastAPI server:**
-   ```bash
-   python -m uvicorn nagatha_core.main:app --reload
-   ```
-
-5. **In another terminal, start the Celery worker:**
-   ```bash
-   celery -A nagatha_core.broker.celery_app worker --loglevel=info
-   ```
-
-### Using the CLI
+Run the full stack via Docker Compose (API, worker, RabbitMQ, Redis):
 
 ```bash
-# List available modules
+git clone https://github.com/azcoigreach/nagatha_core
+cd nagatha_core
+docker-compose up -d
+```
+
+Access points:
+- API: http://localhost:8000
+- Docs: http://localhost:8000/docs
+- RabbitMQ: http://localhost:15672 (guest/guest)
+
+### Local development (contributors only)
+
+Local installs are for contributors and debugging the stack.
+
+```bash
+pip install -r requirements.txt
+python -m uvicorn nagatha_core.main:app --reload
+celery -A nagatha_core.broker.celery_app worker --loglevel=info
+```
+
+### CLI (contributors)
+
+```bash
 nagatha modules
-
-# List all tasks
 nagatha list
-
-# Run a task
 nagatha run echo_bot.echo -k message="Hello, World!"
-
-# Check task status
 nagatha status --task-id <task-id>
-
-# Show configuration
 nagatha config
-nagatha config api.port
-
-# Start Celery worker
 nagatha worker
 ```
 
 ### Using the API
 
-#### Health Check
 ```bash
 curl http://localhost:8000/ping
-```
-
-#### List Modules
-```bash
 curl http://localhost:8000/modules
-```
-
-#### List Tasks
-```bash
 curl http://localhost:8000/tasks
-```
-
-#### Run a Task
-```bash
 curl -X POST http://localhost:8000/tasks/run \
   -H "Content-Type: application/json" \
-  -d '{
-    "task_name": "echo_bot.echo",
-    "kwargs": {"message": "Hello from API"}
-  }'
-```
-
-#### Check Task Status
-```bash
+  -d '{"task_name": "echo_bot.echo", "kwargs": {"message": "Hello from API"}}'
 curl http://localhost:8000/tasks/{task_id}
 ```
 
+## 🌉 Building External Nagatha Services
+
+External Nagatha apps should talk to the running core stack over queues and HTTP. They should not import or vendor nagatha_core code.
+
+1) Bring up Core via `docker-compose up -d`.
+2) Point your service to the shared endpoints:
+```bash
+export CELERY_BROKER_URL="amqp://guest:guest@localhost:5672//"
+export CELERY_RESULT_BACKEND="redis://localhost:6379/0"
+export NAGATHA_CORE_API="http://localhost:8000"
+```
+3) Call a core-hosted task from any Celery client:
+```python
+from celery import Celery
+
+app = Celery(
+    "my_nagatha_service",
+    broker="amqp://guest:guest@localhost:5672//",
+    backend="redis://localhost:6379/0",
+)
+
+result = app.send_task("echo_bot.echo", kwargs={"message": "hi"})
+print(result.get(timeout=10))
+```
+4) Or use the REST API:
+```bash
+curl -X POST "$NAGATHA_CORE_API/tasks/run" \
+  -H "Content-Type: application/json" \
+  -d '{"task_name": "echo_bot.echo", "kwargs": {"message": "hi"}}'
+```
+
+**Docker networking tip:** If your service runs in the same compose project, use service names (`broker`, `redis`, `api`) instead of `localhost`.
+
 ## 🧩 Module Development
 
-### Creating a New Module
+Modules shared across Nagatha live in this repo and are exposed by the running Core stack. External services should consume them over queues/API rather than importing this code.
 
-Each module (sub-mind) should follow this structure:
+### Creating a New Module
 
 ```
 my_module/
@@ -219,7 +191,6 @@ def register_tasks(registry):
 name: my_module
 version: "0.1.0"
 description: Description of my module
-dependencies: []
 ```
 
 ### Registering the Module
@@ -230,8 +201,6 @@ dependencies: []
 4. Verify with: `nagatha list modules`
 
 ## ⚙️ Configuration
-
-### Configuration Files
 
 nagatha_core loads configuration in this priority order:
 
@@ -262,10 +231,6 @@ logging:
 module_paths:
   - "nagatha_core/modules"
   - "./custom_modules"
-
-ai_config:
-  openai_api_key: "your-key-here"
-  model: "gpt-4"
 ```
 
 ### Environment Variables
@@ -291,247 +256,55 @@ export NAGATHA_MODULE_PATHS="nagatha_core/modules:./custom_modules"
 
 ### Endpoints
 
-#### `GET /ping`
-Health check endpoint.
+- `GET /ping` — Health check
+- `GET /modules` — List all registered modules
+- `GET /tasks` — List all available tasks
+- `POST /tasks/run` — Queue a task for execution
+- `GET /tasks/{task_id}` or `GET /status/{task_id}` — Task status/result
 
-**Response:**
-```json
-{
-  "status": "healthy",
-  "version": "0.1.0"
-}
+### Example Requests
+
+**Run a task:**
+```bash
+curl -X POST http://localhost:8000/tasks/run \
+  -H "Content-Type: application/json" \
+  -d '{"task_name": "echo_bot.echo", "kwargs": {"message": "Hello"}}'
 ```
 
-#### `GET /modules`
-List all registered modules.
-
-**Response:**
-```json
-{
-  "echo_bot": {
-    "name": "echo_bot",
-    "description": "A simple echo test module",
-    "version": "0.1.0",
-    "tasks": {
-      "echo": {
-        "name": "echo_bot.echo",
-        "doc": "Echo a message back."
-      }
-    },
-    "has_heartbeat": true
-  }
-}
-```
-
-#### `GET /tasks`
-List all available tasks.
-
-**Response:**
-```json
-{
-  "echo_bot": {
-    "echo": {
-      "name": "echo_bot.echo",
-      "doc": "Echo a message back."
-    }
-  }
-}
-```
-
-#### `POST /tasks/run`
-Queue a task for execution.
-
-**Request:**
-```json
-{
-  "task_name": "echo_bot.echo",
-  "kwargs": {
-    "message": "Hello"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "task_id": "abc123def456",
-  "status": "pending",
-  "task_name": "echo_bot.echo"
-}
-```
-
-#### `GET /tasks/{task_id}` or `GET /status/{task_id}`
-Get task status and result.
-
-**Response:**
-```json
-{
-  "task_id": "abc123def456",
-  "status": "success",
-  "result": "Echo: Hello",
-  "error": null,
-  "created_at": "2025-10-20T12:34:56.789123",
-  "completed_at": "2025-10-20T12:34:58.123456"
-}
+**Task status:**
+```bash
+curl http://localhost:8000/tasks/{task_id}
 ```
 
 ## 🧪 Testing
 
-### Run All Tests
 ```bash
 pytest tests/ -v
+pytest tests/ --cov=nagatha_core
 ```
 
-### Run Specific Test File
-```bash
-pytest tests/test_echo_bot.py -v
-```
-
-### Run Tests with Coverage
-```bash
-pytest tests/ --cov=nagatha_core --cov-report=html
-```
-
-### Test Structure
-
-- `test_types.py` - Data structure tests
-- `test_config.py` - Configuration loading tests
-- `test_registry.py` - Module discovery tests
-- `test_logging.py` - Logging tests
-- `test_echo_bot.py` - Echo module tests
-- `test_ai.py` - AI module tests
-
-## 🔧 CLI Commands
-
-### `nagatha run <task_name>`
-Run a task with arguments.
-
-```bash
-nagatha run echo_bot.echo -k message="Hello World"
-nagatha run echo_bot.echo --kwargs message="Test" --json
-```
-
-### `nagatha modules`
-List all registered modules with their metadata.
+## 🔧 CLI Reference (contributors)
 
 ```bash
 nagatha modules
-```
-
-### `nagatha list`
-List all available tasks grouped by module.
-
-```bash
 nagatha list
-```
-
-### `nagatha status --task-id <id>`
-Check task status.
-
-```bash
-nagatha status -t abc123def456
-```
-
-### `nagatha config [key]`
-Show configuration.
-
-```bash
-nagatha config                # Show all config
-nagatha config api.port       # Show specific key
-nagatha config celery         # Show section
-```
-
-### `nagatha worker`
-Start the Celery worker.
-
-```bash
+nagatha run <module.task> -k key=value
+nagatha status --task-id <id>
+nagatha config [key]
 nagatha worker
-```
-
-## 🤖 AI Integration (Future)
-
-Reserved for tasks like:
-
-- `ai.summarize(text: str) -> str` - Summarize text
-- `ai.analyze_sentiment(text: str) -> dict` - Sentiment analysis
-- `ai.generate_prompt(template: str) -> str` - Template rendering
-- AI token counting and chunking strategies
-
-## 🔐 Security Considerations
-
-- Validate all task inputs
-- Use environment variables for sensitive data
-- Restrict API access with authentication (future)
-- Enable HTTPS for production deployments
-- Sanitize log outputs for sensitive data
-
-## 📊 Monitoring
-
-### Task Status
-```bash
-# Check individual task
-nagatha status --task-id <task-id>
-
-# API endpoint
-curl http://localhost:8000/tasks/<task-id>
-```
-
-### Logging
-Logs are output to console and optionally to file:
-```bash
-# View logs
-tail -f logs/nagatha.log
-```
-
-### RabbitMQ Management
-Access RabbitMQ management UI:
-```
-http://localhost:15672
-# Default: guest / guest
 ```
 
 ## 🐛 Troubleshooting
 
-### Module not discovered
-1. Check module path in configuration
-2. Verify `__init__.py` exists
-3. Ensure `register_tasks` function is defined
-4. Check logs: `NAGATHA_LOGGING_LEVEL=DEBUG`
-
-### Task not found
-1. Run `nagatha list` to see registered tasks
-2. Use full task name: `module_name.task_name`
-3. Restart worker after adding new modules
-
-### Connection refused (RabbitMQ)
-1. Verify RabbitMQ is running
-2. Check broker URL in config
-3. Test: `telnet localhost 5672`
-
-### Task timeout
-1. Increase timeout in task configuration
-2. Check Celery worker logs
-3. Verify task implementation
-
-## 📝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Update documentation
-5. Submit a pull request
-
-## 📄 License
-
-[Add license here]
+- Cannot reach broker/API? Confirm containers are up (`docker-compose ps`) and ports are published.
+- Task not found? Verify task name `module.task` and that the worker container is running.
+- New module not loading? Confirm `register_tasks` exists and module path is configured.
 
 ## 🤝 Support
 
-For issues, questions, or suggestions:
-- Open an issue on GitHub
-- Check existing documentation
-- Review test files for examples
+- Issues and discussions: https://github.com/azcoigreach/nagatha_core
+- API docs: http://localhost:8000/docs when Core is running
 
 ---
 
-**nagatha_core v0.1.0** - Building intelligent, modular AI systems.
+**nagatha_core v0.1.0** – Central services for all Nagatha applications.

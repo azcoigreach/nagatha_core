@@ -2,14 +2,14 @@
 
 ## System Overview
 
-nagatha_core is a modular orchestration framework built on the following architecture:
+nagatha_core is the shared services hub for all Nagatha applications. It runs as a Dockerized stack (API + Celery workers + RabbitMQ + Redis) and exposes integration surfaces over HTTP and message queues.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    User Interfaces                          │
 ├──────────────────┬──────────────────┬──────────────────────┤
-│   FastAPI Web    │   Click CLI      │  Direct Python API   │
-│   /tasks/run     │   nagatha run    │  get_registry()      │
+│   FastAPI Web    │   Click CLI      │  Internal Python API │
+│   /tasks/run     │   nagatha run    │  (dev-only)          │
 └──────────────────┼──────────────────┼──────────────────────┘
                    │                  │
                    ▼                  ▼
@@ -39,6 +39,8 @@ nagatha_core is a modular orchestration framework built on the following archite
 │  Broker      │     State Storage       │  Retries         │
 └──────────────┴──────────────────────────┴──────────────────┘
 ```
+
+**Integration stance:** Core is consumed over the network. External Nagatha services should connect to the running stack (HTTP + broker) rather than importing the codebase or packaging it as a library.
 
 ## Core Components
 
@@ -426,6 +428,18 @@ registry.register_task(
     default_retry_delay=60,
 )
 ```
+
+## Integration Model and Service Contracts
+
+- **Deployment:** Core runs as a Docker Compose stack (API, Celery workers, RabbitMQ broker, Redis backend). Consumers connect over the network; no `pip install` required or expected.
+- **Shared modules:** Only modules shipped in this repository are exposed to other Nagatha services (e.g., `echo_bot`). They are registered as Celery tasks named `module.task`.
+- **Message queue contract:**
+   - Broker: RabbitMQ (default URL: `amqp://guest:guest@localhost:5672//`)
+   - Result backend: Redis (default URL: `redis://localhost:6379/0`)
+   - Task names: `module.task` (e.g., `echo_bot.echo`)
+   - Invocation from any Celery client: `app.send_task("echo_bot.echo", kwargs={...})`
+- **HTTP contract:** The FastAPI service exposes `/ping`, `/modules`, `/tasks`, `/tasks/run`, `/tasks/{id}`, `/status/{id}`. See User Guide for payloads.
+- **External services:** Point your service to the shared broker/backends/API via environment variables and use Celery or HTTP to consume core tasks. If co-located in Docker, use service DNS names (`broker`, `redis`, `api`).
 
 ## Testing Strategy
 
