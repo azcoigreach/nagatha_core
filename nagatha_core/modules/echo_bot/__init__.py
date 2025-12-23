@@ -7,6 +7,13 @@ and task registration pattern for nagatha_core.
 
 __version__ = "0.1.0"
 
+from pydantic import BaseModel, Field
+
+
+class EchoKwargs(BaseModel):
+    """Schema for echo task kwargs."""
+
+    message: str = Field(..., description="Message to echo.")
 
 def echo(message: str) -> str:
     """
@@ -44,4 +51,4 @@ def register_tasks(registry):
     Args:
         registry: The TaskRegistry instance
     """
-    registry.register_task("echo_bot", "echo", echo)
+    registry.register_task("echo_bot", "echo", echo, kwargs_model=EchoKwargs)

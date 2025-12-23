@@ -9,7 +9,9 @@ import importlib
 import inspect
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Type
+
+from pydantic import BaseModel, ValidationError
 
 from .types import ModuleMetadata, TaskStatus, TaskResult
 from .logging import get_logger
@@ -25,6 +27,8 @@ class TaskRegistry:
         """Initialize the registry."""
         self.modules: Dict[str, ModuleMetadata] = {}
         self.tasks: Dict[str, Callable] = {}
+        self.task_kwargs_models: Dict[str, Type[BaseModel]] = {}
+        self.task_kwargs_schemas: Dict[str, Dict[str, Any]] = {}
         self._discovered = False
     
     def discover_modules(self, module_paths: List[str]) -> List[str]:
@@ -104,6 +108,8 @@ class TaskRegistry:
         module_name: str,
         task_name: str,
         task_func: Callable,
+        kwargs_schema: Optional[Dict[str, Any]] = None,
+        kwargs_model: Optional[Type[BaseModel]] = None,
         **options,
     ) -> str:
         """
@@ -125,12 +131,19 @@ class TaskRegistry:
         celery_task = celery_app.task(name=full_task_name, **options)(task_func)
         
         self.tasks[full_task_name] = celery_task
+        schema_payload = kwargs_schema
+        if kwargs_model:
+            self.task_kwargs_models[full_task_name] = kwargs_model
+            schema_payload = kwargs_model.model_json_schema()
+        if schema_payload:
+            self.task_kwargs_schemas[full_task_name] = schema_payload
         
         # Update module metadata
         if module_name in self.modules:
             self.modules[module_name].tasks[task_name] = {
                 "name": full_task_name,
                 "doc": inspect.getdoc(task_func) or "No description",
+                "kwargs_schema": schema_payload,
             }
         
         logger.info(f"Registered task: {full_task_name}")
@@ -168,6 +181,75 @@ class TaskRegistry:
         for module_name, metadata in self.modules.items():
             result[module_name] = metadata.tasks
         return result
+
+    def list_task_summaries(self) -> List[Dict[str, Any]]:
+        """
+        List all tasks with descriptions and kwargs schemas.
+
+        Returns:
+            List of task summary dictionaries.
+        """
+        tasks: List[Dict[str, Any]] = []
+        for module_name, metadata in self.modules.items():
+            for task_name, task_info in metadata.tasks.items():
+                full_name = task_info.get("name", f"{module_name}.{task_name}")
+                tasks.append(
+                    {
+                        "name": full_name,
+                        "module": module_name,
+                        "description": task_info.get("doc", "No description"),
+                        "kwargs_schema": self.task_kwargs_schemas.get(full_name),
+                    }
+                )
+        return tasks
+
+    def validate_task_kwargs(self, task_name: str, kwargs: Dict[str, Any]) -> Optional[str]:
+        """
+        Validate task kwargs against a registered schema if available.
+
+        Args:
+            task_name: Full task name.
+            kwargs: Task keyword arguments.
+
+        Returns:
+            Optional validation error message.
+        """
+        model = self.task_kwargs_models.get(task_name)
+        if not model:
+            return None
+        try:
+            model.model_validate(kwargs)
+            return None
+        except ValidationError as exc:
+            return str(exc)
+
+    def run_task_sync(
+        self,
+        task_name: str,
+        timeout_s: Optional[int] = None,
+        queue: Optional[str] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """
+        Run a registered task synchronously.
+
+        Args:
+            task_name: Full task name.
+            timeout_s: Optional timeout in seconds.
+            queue: Optional queue name.
+            **kwargs: Task arguments.
+
+        Returns:
+            Dictionary with task_id and result.
+        """
+        task = self.get_task(task_name)
+        if not task:
+            raise ValueError(f"Task not found: {task_name}")
+
+        result = task.apply_async(kwargs=kwargs, queue=queue)
+        output = result.get(timeout=timeout_s)
+        logger.info(f"Task completed synchronously: {task_name} (ID: {result.id})")
+        return {"task_id": result.id, "result": output}
     
     def get_module_metadata(self, module_name: str) -> Optional[ModuleMetadata]:
         """
@@ -203,7 +285,7 @@ class TaskRegistry:
             has_heartbeat=hasattr(module, "heartbeat"),
         )
     
-    def run_task(self, task_name: str, **kwargs) -> str:
+    def run_task(self, task_name: str, queue: Optional[str] = None, **kwargs) -> str:
         """
         Run a registered task.
         
@@ -218,7 +300,7 @@ class TaskRegistry:
         if not task:
             raise ValueError(f"Task not found: {task_name}")
         
-        result = task.apply_async(kwargs=kwargs)
+        result = task.apply_async(kwargs=kwargs, queue=queue)
         logger.info(f"Task queued: {task_name} (ID: {result.id})")
         return result.id
     
