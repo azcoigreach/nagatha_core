@@ -7,24 +7,14 @@ Serves the HTTP API for task invocation, module discovery, and status tracking.
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .config import get_config
 from .registry import initialize_registry
 from .logging import get_logger, configure_logging
-from .api.schemas import (
-    ErrorResponse,
-    ModuleInfo,
-    PingResponse,
-    StandardResponse,
-    TaskRunRequest,
-    TaskRunResponse,
-    TaskStatusResponse,
-    TaskSummary,
-)
-from .api.utils import apply_legacy_headers
+from .api.schemas import ErrorResponse
 from .api import v1 as v1_routes
 
 logger = get_logger(__name__)
@@ -118,108 +108,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(v1_routes.router)
-
-
-@app.get(
-    "/ping",
-    response_model=StandardResponse[PingResponse],
-    status_code=status.HTTP_200_OK,
-    deprecated=True,
-    tags=["system"],
-    responses={status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse}},
-)
-async def legacy_ping(request: Request, response: Response) -> StandardResponse[PingResponse]:
-    """Legacy health check endpoint (deprecated)."""
-    apply_legacy_headers(response, "/api/v1/ping")
-    return await v1_routes.ping(request)
-
-
-@app.get(
-    "/modules",
-    response_model=StandardResponse[dict[str, ModuleInfo]],
-    status_code=status.HTTP_200_OK,
-    deprecated=True,
-    tags=["modules"],
-    responses={status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse}},
-)
-async def legacy_list_modules(request: Request, response: Response) -> StandardResponse[dict[str, ModuleInfo]]:
-    """Legacy modules listing (deprecated)."""
-    apply_legacy_headers(response, "/api/v1/modules")
-    return await v1_routes.list_modules(request)
-
-
-@app.get(
-    "/tasks",
-    response_model=StandardResponse[list[TaskSummary]],
-    status_code=status.HTTP_200_OK,
-    deprecated=True,
-    tags=["tasks"],
-    responses={status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse}},
-)
-async def legacy_list_tasks(request: Request, response: Response) -> StandardResponse[list[TaskSummary]]:
-    """Legacy task listing (deprecated)."""
-    apply_legacy_headers(response, "/api/v1/tasks")
-    return await v1_routes.list_tasks(request)
-
-
-@app.post(
-    "/tasks/run",
-    response_model=StandardResponse[TaskRunResponse],
-    status_code=status.HTTP_202_ACCEPTED,
-    deprecated=True,
-    tags=["tasks"],
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ErrorResponse},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
-    },
-)
-async def legacy_run_task(
-    request: Request,
-    payload: TaskRunRequest,
-    background_tasks: BackgroundTasks,
-    response: Response,
-) -> StandardResponse[TaskRunResponse]:
-    """Legacy task execution endpoint (deprecated)."""
-    apply_legacy_headers(response, "/api/v1/tasks/run")
-    return await v1_routes.run_task(request, payload, background_tasks, response)
-
-
-@app.get(
-    "/tasks/{task_id}",
-    response_model=StandardResponse[TaskStatusResponse],
-    status_code=status.HTTP_200_OK,
-    deprecated=True,
-    tags=["tasks"],
-    responses={status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse}},
-)
-async def legacy_get_task_status(
-    request: Request,
-    response: Response,
-    task_id: str,
-) -> StandardResponse[TaskStatusResponse]:
-    """Legacy task status endpoint (deprecated)."""
-    apply_legacy_headers(response, f"/api/v1/tasks/{task_id}")
-    return await v1_routes.get_task_status(request, task_id)
-
-
-@app.get(
-    "/status/{task_id}",
-    response_model=StandardResponse[TaskStatusResponse],
-    status_code=status.HTTP_200_OK,
-    deprecated=True,
-    tags=["tasks"],
-    responses={status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse}},
-)
-async def legacy_get_status(
-    request: Request,
-    response: Response,
-    task_id: str,
-) -> StandardResponse[TaskStatusResponse]:
-    """Legacy alias for task status (deprecated)."""
-    apply_legacy_headers(response, f"/api/v1/tasks/{task_id}")
-    return await v1_routes.get_task_status(request, task_id)
 
 
 if __name__ == "__main__":
